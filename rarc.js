@@ -9,7 +9,7 @@ let RARC = {
       let promises = [];
       for await(let h of directory.values()){
         if(h.kind=="directory")
-          promises.push(recursiveDirectory(h,path.concat(h.name)));
+          promises.push(recursiveDirectory(h,path.concat(directory.name)));
         else{
           promises.push(new Promise(res=>{
             h.getFile().then(f=>{
@@ -27,13 +27,13 @@ let RARC = {
     }
     return new Promise(res=>{
       if(file.kind=="directory")
-        recursiveDirectory(file,[]).then(()=>this.packArrayBufferDictionary(dictionary)).then(res);
+        recursiveDirectory(file,[]).then(()=>RARC.packArrayBufferDictionary(dictionary)).then(res);
       else{
         file.getFile().then(f=>{
           let fr = new FileReader();
           fr.onload = ()=>{
             dictionary[file.name] = fr.result;
-            this.packArrayBufferDictionary(dictionary).then(res);
+            RARC.packArrayBufferDictionary(dictionary).then(res);
           }
           fr.readAsArrayBuffer(f);
         });
@@ -41,9 +41,6 @@ let RARC = {
     });
   },
   packArrayBufferDictionary(file){
-    console.log(file)
-    let fileOffset = 80;
-    let nameTableOffset = fileOffset;
     let nameTable = [];
     let fileSize = 0;
     let fileCounts = {
@@ -52,17 +49,13 @@ let RARC = {
     }
     let folders = [];
     let getFileSize = function({name="",data=new Uint8Array([])}={}){
-      nameTableOffset+=20;
       if(!nameTable.some(n=>n.match(new RegExp(RegExp.escape(name)+"$"))))
         nameTable.push(name);
       if(!(data instanceof Uint8Array) && !(data instanceof ArrayBuffer)){
         fileCounts.folder++;
-        fileOffset+=16;
         folders.push({name,files:data});
-        for(let f of Object.keys(data)){
+        for(let f of Object.keys(data))
           getFileSize({name:f,data:data[f]});
-          nameTableOffset+=16;
-        }
         return;
       }
       fileCounts.file++;
@@ -71,8 +64,8 @@ let RARC = {
     for(let f of Object.keys(file))
       getFileSize({name:f,data:file[f]});
     let onlyFolder = Object.keys(file).length==1 && folders[0].name==Object.keys(file)[0];
-    fileOffset+=onlyFolder?0:16;
-    nameTableOffset+=onlyFolder?0:16;
+    let fileOffset = 80+(fileCounts.folder+(onlyFolder?0:1))*16;
+    let nameTableOffset = fileOffset+(fileCounts.file+fileCounts.folder)*20;
     nameTableOffset = Math.ceil(nameTableOffset/32)*32;
     let dataOffset = nameTableOffset+nameTable.reduce((a,c)=>a+c.length+1,0);
     fileSize+=dataOffset;
@@ -126,15 +119,25 @@ let RARC = {
     let pointer = 64;
     let filesIncluded = 0;
     let dataLength = 0;
+    let fileID = 0;
     if(onlyFolder)
       folders[0].root = true;
     else
       folders.unshift({root:true,name:"ROOT",files:file});
     for(let f of folders){
+      if(f==folders[0]){
+        view.setUint16(fileOffset,2**16-1);
+        view.setUint16(fileOffset+2,nameToWeird(f.name));
+        view.setUint16(fileOffset+4,512);
+        view.setUint16(fileOffset+6,nameToOffset(f.name));
+        view.setUint32(fileOffset+8,0);
+        view.setUint32(fileOffset+12,0);
+        filesIncluded++;
+      }
       buffer.set(te.encode(f.root?"ROOT":f.name.slice(0,4).toUpperCase()),pointer);
       view.setUint32(pointer+4,f.root?nameTable[0].lenght:nameToOffset(f.name));
       view.setUint16(pointer+8,f.root?0:nameToWeird(f.name));
-      let files = Object.keys(folders[0].files).length;
+      let files = Object.keys(f.files).length;
       view.setUint16(pointer+10,files);
       view.setUint32(pointer+12,filesIncluded);
       pointer+=16;
@@ -142,16 +145,17 @@ let RARC = {
         let data = f.files[k];
         let isFile = (data instanceof Uint8Array) || (data instanceof ArrayBuffer);
         data = isFile?new Uint8Array(data):data;
-        view.setUint16(fileOffset+20*filesIncluded,isFile?filesIncluded:2**16);
+        view.setUint16(fileOffset+20*filesIncluded,isFile?fileID:2**16-1);
         view.setUint16(fileOffset+2+20*filesIncluded,nameToWeird(k));
         view.setUint16(fileOffset+4+20*filesIncluded,isFile?4352:512);
         view.setUint16(fileOffset+6+20*filesIncluded,nameToOffset(k));
-        view.setUint32(fileOffset+8+20*filesIncluded,dataLength);
-        view.setUint32(fileOffset+12+20*filesIncluded,isFile?data.length:0);
+        view.setUint32(fileOffset+8+20*filesIncluded,isFile?dataLength:folders.indexOf(folders.find(f=>f.name==k)));
+        view.setUint32(fileOffset+12+20*filesIncluded,isFile?data.length:16);
         if(isFile)
           buffer.set(data,dataOffset+dataLength);
         dataLength+=isFile?data.length:0;
-        filesIncluded+=isFile?1:0;
+        fileID+=isFile?1:0
+        filesIncluded++;
       }
     }
     
@@ -160,14 +164,13 @@ let RARC = {
       buffer.set(te.encode(n),pointer);
       pointer+=n.length+1;
     }
-    console.log(folders,buffer);
     return new Promise(res=>res(buffer));
   },
   unpackFileSystemHandle(file){
     let fileReader = new FileReader();
     return new Promise(res=>{
       file.getFile().then(f=>{
-        fileReader.onload = ()=>this.unpackArrayBuffer(fileReader.result).then(res);
+        fileReader.onload = ()=>RARC.unpackArrayBuffer(fileReader.result).then(res);
         fileReader.readAsArrayBuffer(f);
       });
     });
@@ -181,7 +184,9 @@ let RARC = {
       let arc = new DataView(array.buffer);
       let pointer = 12;
       let dataOffset = arc.getUint32(pointer)+32;
-      pointer+=32;
+      pointer+=20;
+      let folderCount = arc.getUint32(pointer);
+      pointer+=12;
       let fileOffset = arc.getUint32(pointer)+32;
       pointer+=8;
       let tableOffset = arc.getUint32(pointer)+32;
@@ -199,7 +204,8 @@ let RARC = {
         this.index = index;
         this.isRoot = arc.getUint32(pointer)==21071;
         pointer+=4;
-        this.name = getName(arc.getUint32(pointer));
+        this.namePointer = arc.getUint32(pointer);
+        this.name = getName(this.namePointer);
         pointer+=6;
         this.fileCount = arc.getUint16(pointer);
         pointer+=2;
@@ -218,11 +224,10 @@ let RARC = {
         pointer+=6;
         this.name = getName(arc.getUint16(pointer));
         pointer+=2;
-        let dof = arc.getUint32(pointer);
+        this.dataOffset = arc.getUint32(pointer);
         pointer+=4;
-        ds = arc.getUint32(pointer);
-        this.data = array.slice(dataOffset+dof,dataOffset+dof+ds);
-        this.path = [];
+        let ds = arc.getUint32(pointer);
+        this.data = array.slice(dataOffset+this.dataOffset,dataOffset+this.dataOffset+ds);
       }
       let recursiveFolder = function(rf){
         let o = output;
@@ -231,11 +236,12 @@ let RARC = {
         for(let i=0;i<rf.fileCount;i++){
           let rfd = new RarcFileData(i,rf);
           if(rfd.id==0xFFFF){
-            let rfn = new RarcFolder(rf.index+1);
-            if(rfn.name!="." && rfn.name!=".."){
-              o[rfn.name] = {};
-              rfn.path.push[rfn.name];
-              recursiveFolder(rf);
+            if(rfd.name!="." && rfd.name!=".."){
+              let rfn = new RarcFolder(rfd.dataOffset);
+              console.log(rfd,rfn)
+              o[rfd.name] = {};
+              rfn.path = rf.path.concat([rfd.name]);
+              recursiveFolder(rfn);
             }
             continue;
           }
