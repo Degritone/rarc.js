@@ -238,7 +238,6 @@ let RARC = {
           if(rfd.id==0xFFFF){
             if(rfd.name!="." && rfd.name!=".."){
               let rfn = new RarcFolder(rfd.dataOffset);
-              console.log(rfd,rfn)
               o[rfd.name] = {};
               rfn.path = rf.path.concat([rfd.name]);
               recursiveFolder(rfn);
