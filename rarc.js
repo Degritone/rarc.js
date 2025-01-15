@@ -125,9 +125,18 @@ let RARC = {
       folders[0].root = true;
     else
       folders.unshift({root:true,name:"ROOT",files:file});
+    {
+      view.setUint16(fileOffset,2**16-1);
+      view.setUint16(fileOffset+2,nameToWeird(folders[0].name));
+      view.setUint16(fileOffset+4,512);
+      view.setUint16(fileOffset+6,folders[0].files==file?nameTable[0].length:nameToOffset(folders[0].name));
+      view.setUint32(fileOffset+8,0);
+      view.setUint32(fileOffset+12,16);
+      filesIncluded++;
+    }
     for(let f of folders){
       buffer.set(te.encode(f.root?"ROOT":f.name.slice(0,4).toUpperCase()),pointer);
-      view.setUint32(pointer+4,f.root?nameTable[0].length:nameToOffset(f.name));
+      view.setUint32(pointer+4,f.files==file?nameTable[0].length:nameToOffset(f.name));
       view.setUint16(pointer+8,nameToWeird(f.name));
       let files = Object.keys(f.files).length;
       view.setUint16(pointer+10,files);
