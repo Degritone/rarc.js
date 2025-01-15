@@ -63,9 +63,10 @@ let RARC = {
     }
     for(let f of Object.keys(file))
       getFileSize({name:f,data:file[f]});
+    
     let onlyFolder = Object.keys(file).length==1 && folders[0].name==Object.keys(file)[0];
     let fileOffset = 80+(fileCounts.folder+(onlyFolder?0:1))*16;
-    let nameTableOffset = fileOffset+(fileCounts.file+fileCounts.folder)*20;
+    let nameTableOffset = fileOffset+(fileCounts.file+fileCounts.folder)*20+16;
     nameTableOffset = Math.ceil(nameTableOffset/32)*32;
     let dataOffset = nameTableOffset+nameTable.reduce((a,c)=>a+c.length+1,0);
     fileSize+=dataOffset;
@@ -73,7 +74,7 @@ let RARC = {
     let nameToWeird = function(name){
       let n = 0;
       for(let i=0;i<name.length;i++)
-        n+=name.charCodeAt(name.length-1-i)*(3**1);
+        n+=name.charCodeAt(name.length-1-i)*(3**i);
       return n%(2**16);
     }
     
@@ -125,18 +126,9 @@ let RARC = {
     else
       folders.unshift({root:true,name:"ROOT",files:file});
     for(let f of folders){
-      if(f==folders[0]){
-        view.setUint16(fileOffset,2**16-1);
-        view.setUint16(fileOffset+2,nameToWeird(f.name));
-        view.setUint16(fileOffset+4,512);
-        view.setUint16(fileOffset+6,nameToOffset(f.name));
-        view.setUint32(fileOffset+8,0);
-        view.setUint32(fileOffset+12,0);
-        filesIncluded++;
-      }
       buffer.set(te.encode(f.root?"ROOT":f.name.slice(0,4).toUpperCase()),pointer);
-      view.setUint32(pointer+4,f.root?nameTable[0].lenght:nameToOffset(f.name));
-      view.setUint16(pointer+8,f.root?0:nameToWeird(f.name));
+      view.setUint32(pointer+4,f.root?nameTable[0].length:nameToOffset(f.name));
+      view.setUint16(pointer+8,nameToWeird(f.name));
       let files = Object.keys(f.files).length;
       view.setUint16(pointer+10,files);
       view.setUint32(pointer+12,filesIncluded);
