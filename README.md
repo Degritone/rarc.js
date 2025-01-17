@@ -31,11 +31,11 @@ The above is simply an object (or more purely, a dictionary) and is not wrapped 
 
 The function signatures are as follows:
 ```js
-RARC.unpackFileSystemHandle(FileSystemHandle) -> dictionary
-RARC.unpackArrayBuffer(ArrayBuffer) -> dictionary
-RARC.unpackArrayBuffer(Uint8Array) -> dictionary
-RARC.packFileSystemHandle(FileSystemHandle) -> Uint8Array
-RARC.packArrayBufferDictionary(dictionary) -> Uint8Array
+RARC.unpackFileSystemHandle(FileSystemHandle) -> Promise -> dictionary
+RARC.unpackArrayBuffer(ArrayBuffer)           -> Promise -> dictionary
+RARC.unpackArrayBuffer(Uint8Array)            -> Promise -> dictionary
+RARC.packFileSystemHandle(FileSystemHandle)   -> Promise -> Uint8Array
+RARC.packArrayBufferDictionary(dictionary)    -> Promise -> Uint8Array
 ```
 
 ##### License
