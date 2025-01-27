@@ -42,7 +42,7 @@ let RARC = {
   },
   packArrayBufferDictionary(file){
     let nameTable = [];
-    let fileSize = 0;
+    let fileSize = 1;
     let fileCounts = {
       file:0,
       folder:0
