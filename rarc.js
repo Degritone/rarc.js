@@ -70,6 +70,7 @@ let RARC = {
     nameTableOffset = Math.ceil(nameTableOffset/32)*32;
     let dataOffset = nameTableOffset+nameTable.reduce((a,c)=>a+c.length+1,0);
     fileSize+=dataOffset;
+    fileSize = Math.ceil(fileSize/32)*32;
     
     let nameToWeird = function(name){
       let n = 0;
