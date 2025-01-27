@@ -66,9 +66,11 @@ let RARC = {
     
     let onlyFolder = Object.keys(file).length==1 && folders[0].name==Object.keys(file)[0];
     let fileOffset = 80+(fileCounts.folder+(onlyFolder?0:1))*16;
+    fileOffset = Math.ceil(fileOffset/32)*32;
     let nameTableOffset = fileOffset+(fileCounts.file+fileCounts.folder)*20+16;
     nameTableOffset = Math.ceil(nameTableOffset/32)*32;
     let dataOffset = nameTableOffset+nameTable.reduce((a,c)=>a+c.length+1,0);
+    dataOffset = Math.ceil(dataOffset/32)*32;
     fileSize+=dataOffset;
     fileSize = Math.ceil(fileSize/32)*32;
     
